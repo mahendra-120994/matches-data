@@ -11,8 +11,6 @@ const dbPath = path.join(__dirname, "cricketMatchDetails.db");
 
 let db = null;
 
-const snakeToCamel = require("./snakeToCamel");
-
 const initializeDbAndServer = async () => {
   try {
     db = await open({
@@ -32,28 +30,26 @@ initializeDbAndServer();
 
 // GET States API 1
 app.get("/players/", async (req, res) => {
-  const getStatesQuery = `
+  const getPlayersQuery = `
     SELECT
-    *
+    player_id as playerId,
+    player_name as playerName
     FROM
     player_details
     `;
-  const statesArray = await db.all(getStatesQuery);
+  const payersArray = await db.all(getPlayersQuery);
 
-  const states = statesArray.map((eachState) => {
-    return snakeToCamel(eachState);
-  });
-  res.send(states);
+  res.send(payersArray);
 });
 
 // GET State by ID API 2
 app.get("/players/:playerId/", async (req, res) => {
   const { playerId } = req.params;
-  const getPlayerQuery = `SELECT * FROM player_details WHERE player_id = ${playerId};`;
-  const playerData = await db.get(getPlayerQuery);
-
-  const player = snakeToCamel(playerData);
-
+  const getPlayerQuery = `SELECT 
+  player_id as playerId,
+  player_name as playerName
+  FROM player_details WHERE player_id = ${playerId};`;
+  const player = await db.get(getPlayerQuery);
   res.send(player);
 });
 
@@ -74,11 +70,13 @@ app.put("/players/:playerId/", async (req, res) => {
 // GET Match by ID API 4
 app.get("/matches/:matchId/", async (req, res) => {
   const { matchId } = req.params;
-  const getMatchQuery = `SELECT * FROM match_details WHERE match_id = ${matchId};`;
-  const matchData = await db.get(getMatchQuery);
+  const getMatchQuery = `SELECT 
+  match_id as matchId,
+  match,
+  year
+  FROM match_details WHERE match_id = ${matchId};`;
 
-  const match = snakeToCamel(matchData);
-
+  const match = await db.get(getMatchQuery);
   res.send(match);
 });
 
@@ -87,18 +85,17 @@ app.get("/players/:playerId/matches", async (req, res) => {
   const { playerId } = req.params;
   const getMatchesQuery = `
   SELECT
-  T.match_id as matchId,
+  match_details.match_id as matchId,
   match_details.match,
   match_details.year
   FROM ( player_details
   JOIN player_match_score ON player_details.player_id = player_match_score.player_id ) as T
   JOIN match_details ON match_details.match_id = T.match_id
   WHERE T.player_id = ${playerId};`;
+
   const matchesData = await db.all(getMatchesQuery);
 
-  const matches = Object.values(matchesData);
-
-  res.send(matches);
+  res.send(matchesData);
 });
 
 // GET Players by Match ID API 6
@@ -106,37 +103,36 @@ app.get("/matches/:matchId/players", async (req, res) => {
   const { matchId } = req.params;
   const getPlyersQuery = `
   SELECT
-  T.player_id as playerId,
-  T.player_name as playerName
-  FROM ( player_details
-  JOIN player_match_score ON player_details.player_id = player_match_score.player_id ) as T
-  JOIN match_details ON match_details.match_id = T.match_id
-  WHERE match_details.match_id = ${matchId};`;
+  player_id as playerId,
+  player_name as playerName
+  FROM player_match_score
+  NATURAL JOIN player_details
+  WHERE match_id = ${matchId};`;
+
   const playersData = await db.all(getPlyersQuery);
 
-  const players = Object.values(playersData);
-
-  res.send(players);
+  res.send(playersData);
 });
 
 // GET Players Score by Player ID API 7
-app.get("/players/:playerId/playerScores", async (req, res) => {
+app.get("/players/:playerId/playerScores/", async (req, res) => {
   const { playerId } = req.params;
   const getScoreQuery = `
-  SELECT
-  T.player_id as playerId,
-  T.player_name as playerName,
-  sum(T.score) as totalScore,
-  sum(T.fours) as totalFours,
-  sum(T.sixes) as totalSixes
-  FROM ( player_details
-  JOIN player_match_score ON player_details.player_id = player_match_score.player_id ) as T
-  WHERE player_details.player_id = ${playerId};`;
+    SELECT
+    player_details.player_id AS playerId,
+    player_details.player_name AS playerName,
+    SUM(player_match_score.score) AS totalScore,
+    SUM(fours) AS totalFours,
+    SUM(sixes) AS totalSixes 
+    FROM 
+    player_details 
+    INNER JOIN 
+    player_match_score ON player_details.player_id = player_match_score.player_id
+    WHERE player_details.player_id = ${playerId};`;
+
   const scoreData = await db.all(getScoreQuery);
 
-  const score = Object.values(scoreData);
-
-  res.send(score);
+  res.send(scoreData);
 });
 
 module.exports = app;
